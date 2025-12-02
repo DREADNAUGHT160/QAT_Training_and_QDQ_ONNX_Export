@@ -1,0 +1,7 @@
+# TensorFlow (Active)
+tensorflow
+tensorflow-model-optimization
+tf2onnx
+onnx
+tf_keras
+numpy==1.23.5
