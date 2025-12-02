@@ -41,6 +41,21 @@ To use a custom dataset:
 2.  Implement a new function (e.g., `get_custom_data`) that returns `train_ds` and `val_ds` as `tf.data.Dataset` objects.
 3.  Update `main_tf.py` to call your new function when the `--dataset` argument matches your dataset name.
 
+### Docker Usage
+You can run the project in a Docker container to ensure a consistent environment.
+
+**1. Build the Image**
+```bash
+docker build -f Dockerfile.tf -t qat-model-tf .
+```
+
+**2. Run the Container**
+Mount the output directory to persist results and enable GPU support (optional but recommended).
+```bash
+docker run --rm --gpus all -v ${PWD}/outputs_tf:/app/outputs_tf qat-model-tf
+```
+*Note: `--gpus all` requires the NVIDIA Container Toolkit.*
+
 ### Adding a New Model
 To add a new model:
 1.  Open `src_tf/model.py`.
