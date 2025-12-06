@@ -63,6 +63,10 @@ python src_torch/export.py
 ```
 *Expected Output*: `Model converted... Model exported to model_qdq.onnx`.
 
+> [!NOTE]
+> You may see a warning: `Float model export failed`. **Ignore this.**
+> This is a debug check failing on the quantization nodes. It does **not** affect the final `model_qdq.onnx`.
+
 ---
 
 ## 3. Verifying the Output
