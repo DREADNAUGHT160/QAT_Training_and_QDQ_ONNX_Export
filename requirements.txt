@@ -1,7 +1,13 @@
-# TensorFlow (Active)
 tensorflow
 tensorflow-model-optimization
-tf2onnx
-onnx
+tf2onnx>=1.16.0
+onnx==1.15.0
 tf_keras
-numpy==1.23.5
+numpy
+PyYAML
+tflite2onnx
+
+# PyTorch QAT Dependencies
+torch==2.2.2
+torchvision==0.17.2
+netron

@@ -1,83 +1,51 @@
-# QAT Training and QDQ ONNX Export
+# PyTorch QAT to ONNX (Explicit QDQ) Pipeline
 
-This project provides a modular framework for Quantization Aware Training (QAT) of TensorFlow models and exporting them to QDQ-quantized ONNX format for NPU deployment.
+This project implements a **Quantization-Aware Training (QAT)** pipeline using **PyTorch 2.2.2**. It is designed to export models in the specific "Explicit QDQ" ONNX format required by the Zukimo NPU toolchain.
 
-## Features
-- **Modular Design**: Separate modules for data, models, quantization, training, and export.
-- **QAT Support**: Uses `tensorflow_model_optimization` for QAT, automatically handling layer fusion and quantization simulation.
-- **QDQ ONNX Export**: Exports models with explicit QuantizeLinear/DequantizeLinear nodes (Opset 13).
-- **Extensible**: Easy to add custom datasets and models.
+## 🚀 Key Features
+- **Explicit QDQ Export**: Generates ONNX graphs where `QuantizeLinear` and `DequantizeLinear` nodes are preserved (not folded), enabling the NPU compiler to extract quantization parameters (`IQ`, `OQ`, `WQ`).
+- **Fused Architecture**: Implements `Conv + BatchNorm + ReLU` fusion for hardware efficiency.
+- **Custom Model**: A lightweight 3-layer CNN optimized for CIFAR-10.
 
-## Why TensorFlow?
-This project was originally implemented in PyTorch but was migrated to TensorFlow to resolve issues with **QAT to ONNX export**.
-- **PyTorch Issue**: The PyTorch QAT export often struggled to generate the correct **QDQ (Quantize-Dequantize)** nodes (`QuantizeLinear`, `DequantizeLinear`) required by specific NPU toolchains. It frequently defaulted to operator-level quantization or failed to preserve quantization parameters correctly during the ONNX conversion.
-- **TensorFlow Solution**: The **TensorFlow Model Optimization Toolkit (TFMOT)** combined with `tf2onnx` provides a robust pipeline for generating standard, compliant QDQ ONNX models (Opset 13), ensuring seamless deployment to the target hardware.
+---
 
-## Structure
-```
-src_tf/
-  data.py       # Data loading logic
-  model.py      # Model definitions
-  train.py      # Training loop and QAT logic
-  export.py     # ONNX export logic
-main_tf.py      # Entry point
-```
+## 🏗️ Model Architecture
+The model (`src_torch/model.py`) is a custom VGG-style CNN designed for 32x32 inputs (CIFAR-10 classification).
 
-## Usage
+| Layer Block | Components | Output Shape | Notes |
+| :--- | :--- | :--- | :--- |
+| **Input** | `QuantStub` | `(3, 32, 32)` | Converts Float $\to$ Int8 |
+| **Block 1** | `Conv2d` (3$\to$32, 3x3) + `BN` + `ReLU` + `MaxPool` | `(32, 16, 16)` | Fused OP |
+| **Block 2** | `Conv2d` (32$\to$64, 3x3) + `BN` + `ReLU` + `MaxPool` | `(64, 8, 8)` | Fused OP |
+| **Block 3** | `Conv2d` (64$\to$64, 3x3) + `BN` + `ReLU` | `(64, 8, 8)` | Fused OP |
+| **Head** | `Flatten` + `Linear` (4096$\to$10) | `(10)` | Fully Connected |
+| **Output** | `DeQuantStub` | `(10)` | Converts Int8 $\to$ Float |
 
-### Installation
+---
+
+## 🛠️ Usage
+
+### 1. Requirements
+**Crucial**: You must use **PyTorch 2.2.2** (or 2.0.1) for the export to work correctly. Newer versions (2.3+) currently fail to export standard QAT graphs.
 ```bash
 pip install -r requirements.txt
 ```
 
-### Training and Exporting (CIFAR-10)
+### 2. Training (QAT)
+Trains the model, performs fake quantization, fuses layers, and saves the checkpoint.
 ```bash
-python main_tf.py --dataset cifar10 --epochs 5 --export_path resnet18_qat.onnx
+python src_torch/train.py
 ```
+**Output**: `qat_model.pth`
 
-### Custom Dataset
-To use a custom dataset:
-1.  Open `src_tf/data.py`.
-2.  Implement a new function (e.g., `get_custom_data`) that returns `train_ds` and `val_ds` as `tf.data.Dataset` objects.
-3.  Update `main_tf.py` to call your new function when the `--dataset` argument matches your dataset name.
-
-### Docker Usage
-You can run the project in a Docker container to ensure a consistent environment.
-
-**1. Build the Image**
+### 3. Export (ONNX)
+Converts the QAT model to a quantized version and exports it to ONNX using `opset 13`.
 ```bash
-docker build -f Dockerfile.tf -t qat-model-tf .
+python src_torch/export.py
 ```
+**Output**: `model_qdq.onnx`
 
-**2. Run the Container**
-Mount the output directory to persist results and enable GPU support (optional but recommended).
-```bash
-docker run --rm --gpus all -v ${PWD}/outputs_tf:/app/outputs_tf qat-model-tf
-```
-*Note: `--gpus all` requires the NVIDIA Container Toolkit.*
+---
 
-### Adding a New Model
-To add a new model:
-1.  Open `src_tf/model.py`.
-2.  Define your model using the **Functional API** (required for QAT compatibility).
-    *   **Important**: Use `tf_keras` imports (`import tf_keras as keras`) instead of `tensorflow.keras` to ensure compatibility with `tensorflow-model-optimization`.
-3.  Update `src_tf/train.py` to import and instantiate your new model.
-
-## Visualization
-You can visualize the exported ONNX model to verify the QDQ nodes (`QuantizeLinear`, `DequantizeLinear`).
-
-### Using Netron
-1.  **Web**: Go to [netron.app](https://netron.app) and open `outputs_tf/model_qat.onnx`.
-2.  **Local**: Install and run Netron:
-    ```bash
-    pip install netron
-    netron outputs_tf/model_qat.onnx
-    ```
-
-## QAT Details
-The project uses **TensorFlow Model Optimization Toolkit (TFMOT)** for QAT.
-1. **Quantization**: Uses `tfmot.quantization.keras.quantize_model` to simulate quantization during training (FakeQuant nodes).
-2. **Export**: The model is exported to ONNX using `tf2onnx` with `opset=13`, producing standard QDQ nodes (`QuantizeLinear`, `DequantizeLinear`) compatible with NPU toolchains.
-
-## References
-- [NVIDIA TensorFlow Quantization Toolkit Documentation](https://docs.nvidia.com/deeplearning/tensorrt/archives/tensorrt-861/tensorflow-quantization-toolkit/docs/index.html#:~:text=Getting%20Started:%20End%20to%20End,-NVIDIA®%20TensorFlow&text=Initially%2C%20the%20network%20is%20trained,called%20“fine%2Dtuning”.&text=Train%20a%20simple%20network%20on,it%20as%20the%20QAT%20model.)
+## 📦 Artifacts
+- **`model_qdq.onnx`**: The final artifact ready for the Zukimo NPU compiler.
