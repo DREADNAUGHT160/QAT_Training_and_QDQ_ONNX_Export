@@ -7,6 +7,16 @@ This project implements a **Quantization-Aware Training (QAT)** pipeline using *
 - **Fused Architecture**: Implements `Conv + BatchNorm + ReLU` fusion for hardware efficiency.
 - **Custom Model**: A lightweight 3-layer CNN optimized for CIFAR-10.
 
+## ❓ Why Explicit Quantization?
+Standard ONNX export often "folds" quantization parameters (Scale/ZeroPoint) directly into the weights to simplify the graph for CPU/GPU inference.
+**However, the Zukimo NPU Compiler requires the Raw Quantization Nodes.**
+
+It needs to see:
+- `QuantizeLinear` (The "Q" step)
+- `DequantizeLinear` (The "DQ" step)
+
+By keeping these nodes **Explicit** in the graph (using `do_constant_folding=False`), the compiler can extract the exact `IQ` (Input Quantization), `OQ` (Output Quantization), and `WQ` (Weight Quantization) parameters needed to configure the hardware accelerators. Without them, the compiler sees "Float32" operations and fails.
+
 ---
 
 ## 🏗️ Model Architecture
